@@ -6752,6 +6752,178 @@ boot();
 </div>
 
 <div class="toast" id="toast"></div>
+<!-- 1. 引入 Supabase JS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-sdk@2"></script>
+
+<script>
+  // 替换为你在 Supabase 获取到的实际 URL 和 anon key
+  const SUPABASE_URL = 'https://mfpllowjotearnhnjyvb.supabase.co/rest/v1/';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mcGxsb3dqb3RlYXJuaG5qeXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1ODU2NjMsImV4cCI6MjEwMjE2MTY2M30.sOh81vUwBuQbEY4_81U3gc7Cw8N3mgqB3mTp4Ch-p3Q';
+  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // 页面加载完成后，自动检查当前登录状态
+  window.addEventListener('DOMContentLoaded', async () => {
+    checkAuthState();
+  });
+
+  // 1. 检查状态并更新界面
+  async function checkAuthState() {
+    const { data: { user } } = await supabase.auth.getUser();
+    const loggedOutView = document.getElementById('logged-out-view');
+    const loggedInView = document.getElementById('logged-in-view');
+
+    if (user) {
+      loggedOutView.classList.add('hidden');
+      loggedInView.classList.remove('hidden');
+      document.getElementById('user-email-display').innerText = user.email;
+      loadUserData(); // 登录成功后自动拉取数据
+    } else {
+      loggedOutView.classList.remove('hidden');
+      loggedInView.classList.add('hidden');
+    }
+  }
+
+  // 2. 登录与注册
+  async function submitAuth() {
+    const email = document.getElementById('auth-email').value;
+    const password = document.getElementById('auth-password').value;
+    
+    if (!email || !password) {
+      alert('请填写入邮箱和密码！');
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      // 密码错误或账号不存在时，尝试注册
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
+      if (signUpError) {
+        alert('登录/注册失败: ' + signUpError.message);
+      } else {
+        alert('注册成功，请查收邮箱验证或直接登录！');
+        checkAuthState();
+      }
+    } else {
+      alert('登录成功！');
+      checkAuthState();
+    }
+  }
+
+  // 3. 退出登录
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    alert('已退出登录！');
+    checkAuthState();
+  }
+
+  // 4. 从云端读取该用户的历史编辑数据并还原到页面
+  async function loadUserData() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('user_applications')
+      .select('data')
+      .eq('user_id', user.id)
+      .single();
+
+    if (data && data.data) {
+      restorePageData(data.data);
+    }
+  }
+
+  // 5. 将页面修改的内容保存保存至数据库
+  async function saveUserData() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      alert('请先登录！');
+      return;
+    }
+
+    const formData = collectPageData();
+
+    const { error } = await supabase
+      .from('user_applications')
+      .upsert({ 
+        user_id: user.id, 
+        data: formData,
+        updated_at: new Date()
+      }, { onConflict: 'user_id' });
+
+    if (error) alert('保存失败: ' + error.message);
+    else alert('保存成功！');
+  }
+
+  /* -------------------------------------------------------------
+     辅助函数：你需要根据 Workbuddy 页面中的实际输入框 ID 进行修改
+     ------------------------------------------------------------- */
+  
+  // 收集页面数据的函数
+  function collectPageData() {
+    return {
+      // 示例：获取 ID 为 input_1 的输入框内容
+      // field1: document.getElementById('input_1')?.value || '',
+      // field2: document.getElementById('input_2')?.value || ''
+    };
+  }
+
+  // 将数据还原填回页面的函数
+  function restorePageData(savedData) {
+    // 示例：将保存的值填回输入框
+    // if (document.getElementById('input_1')) document.getElementById('input_1').value = savedData.field1 || '';
+    // if (document.getElementById('input_2')) document.getElementById('input_2').value = savedData.field2 || '';
+  }
+</script>
 
 </body>
+<!-- 右上角悬浮登录与控制面板 -->
+<style>
+  #auth-container {
+    position: fixed;
+    top: 15px;
+    right: 15px;
+    z-index: 9999;
+    background: #ffffff;
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
+  #auth-container input {
+    margin-right: 6px;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    outline: none;
+  }
+  #auth-container button {
+    padding: 6px 12px;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-left: 4px;
+  }
+  #auth-container button:hover { background-color: #0056b3; }
+  .hidden { display: none !important; }
+</style>
+
+<div id="auth-container">
+  <!-- 未登录界面 -->
+  <div id="logged-out-view">
+    <input type="email" id="auth-email" placeholder="输入邮箱" />
+    <input type="password" id="auth-password" placeholder="输入密码" />
+    <button onclick="submitAuth()">登录 / 注册</button>
+  </div>
+
+  <!-- 已登录界面 -->
+  <div id="logged-in-view" class="hidden">
+    <span id="user-email-display" style="margin-right: 10px; font-weight: bold;"></span>
+    <button onclick="saveUserData()">保存我的编辑</button>
+    <button onclick="handleLogout()" style="background-color: #dc3545;">退出登录</button>
+  </div>
+</div>
+
 </html>
